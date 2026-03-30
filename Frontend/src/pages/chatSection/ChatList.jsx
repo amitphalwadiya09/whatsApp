@@ -159,9 +159,9 @@ const ChatList = () => {
                     ml: isSearching ? 0 : 2,
                     mr: isSearching ? 0 : 2,
                     mt: isSearching ? 0 : 1,
-                    borderRadius: isSearching ? 0 : 1,
+                    borderRadius: isSearching ? 0 : "50px",
                     mb: 1,
-                    border: isSearching ? "none" : "1px solid #e9edef",
+                    border: isSearching ? "none" : "1px solid #cdd2d4",
                 }}
             >
                 {isSearching ? (
@@ -185,6 +185,7 @@ const ChatList = () => {
                     fullWidth
                     InputProps={{ disableUnderline: true }}
                     sx={{
+                        borderRadius: "20px", bgcolor: "#f6f4f4", px: 1,
                         "& .MuiInputBase-input": {
                             color: "#111b21",
                             fontSize: "14px",

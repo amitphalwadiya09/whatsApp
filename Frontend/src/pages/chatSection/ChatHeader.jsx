@@ -2,7 +2,7 @@ import { Box, Typography } from "@mui/material";
 import AddCircleIcon from "@mui/icons-material/AddCircle";
 import React, { useState } from "react";
 import CreateGroup from "../GroupSection/CreateGroup";
-
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 const ChatHeader = () => {
 
     const [showCreateGroup, setShowCreateGroup] = useState(false);
@@ -33,7 +33,7 @@ const ChatHeader = () => {
                 </Typography>
 
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    {/* <Box
+                    <Box
                         sx={{
                             display: "flex",
                             alignItems: "center",
@@ -49,7 +49,7 @@ const ChatHeader = () => {
                         }}
                     >
                         <ChatBubbleOutlineIcon sx={{ color: "#54656f", fontSize: "22px" }} />
-                    </Box> */}
+                    </Box>
 
                     <Box
                         sx={{

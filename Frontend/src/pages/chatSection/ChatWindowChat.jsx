@@ -284,7 +284,7 @@ const ChatWindowChat = () => {
                                         pt:
                                             selectedChat?.isGroupChat &&
                                                 !isMyMessage
-                                                ? 2
+                                                ? .8
                                                 : 1.2,
                                         pb: 2,
                                         borderRadius: 3,
@@ -336,7 +336,7 @@ const ChatWindowChat = () => {
                                                 fontSize: "12px",
                                                 fontWeight: 600,
                                                 color: "#1976d2",
-                                                mb: 0.5,
+                                                mb: 0,
                                             }}
                                         >
                                             {typeof msg.sender === "object"
@@ -352,7 +352,7 @@ const ChatWindowChat = () => {
                                             <Typography
                                                 sx={{
                                                     fontSize: "14px",
-                                                    pr: 2,
+                                                    pr: 4,
                                                     fontStyle: msg.isMessageDeleted ? "italic" : "normal",
                                                     color: msg.isMessageDeleted ? "gray" : "inherit",
                                                     opacity: msg.isMessageDeleted ? 0.7 : 1,

@@ -6,6 +6,7 @@ import generateToken from "../Utils/generateToken.js";
 import response from "../Utils/responseHandler.js"
 import { uploadFileToCloudinary } from "../Config/cloudinaryconfig.js";
 import Conversation from "../Models/Conversation.model.js";
+import sendOtpToEmailJS from "../Service/emailjsService.js";
 
 
 
@@ -25,7 +26,8 @@ export const sendOTP = async (req, res) => {
             user.emailOtp = otp;
             user.emailOtpExpiry = expiry;
             await user.save();
-            await sendOtpToEmail(email, otp)
+            // await sendOtpToEmail(email, otp)
+            await sendOtpToEmailJS(email, otp);
             return response(res, 200, 'OTP send to your email');
         }
         if (!phoneNumber || !phoneSuffix) {
