@@ -5,7 +5,8 @@ import {
     updateLastMessage,
     removeChat,
     selectChat,
-    updateLastMessageStatus
+    updateLastMessageStatus,
+    updateUnreadCount
 } from "../Slices/chatSlice";
 import { addOrUpdateChat } from "../Slices/chatSlice";
 import {
@@ -32,14 +33,20 @@ const SocketManager = () => {
         const emitUserConnected = () => {
             const user = JSON.parse(localStorage.getItem("user"));
             if (user?._id) {
+                console.log("🔌 Emitting user_connected for:", user._id);
                 socket.emit("user_connected", user._id);
             }
         };
 
         if (socket.connected) {
+            console.log("🔌 Socket already connected, emitting user_connected");
             emitUserConnected();
         } else {
-            socket.on("connect", emitUserConnected);
+            console.log("🔌 Socket not connected, waiting for connect event");
+            socket.on("connect", () => {
+                console.log("🔌 Socket connected event received");
+                emitUserConnected();
+            });
         }
 
         return () => {
@@ -80,27 +87,48 @@ const SocketManager = () => {
             }
         };
 
-        const handleMessageStatusUpdate = ({ messageId, messageStatus }) => {
+        // Handle message delivered status (batch)
+        const handleMessageDelivered = ({ ids, conversationId, status }) => {
+            if (Array.isArray(ids)) {
+                ids.forEach(messageId => {
+                    dispatch(updateMessageStatus({ messageId, messageStatus: status || "delivered" }));
+                    dispatch(updateLastMessageStatus({ messageId, messageStatus: status || "delivered" }));
+                });
+            }
+        };
 
-            // Update the message in the messages list
+        // Handle message read status (batch)
+        const handleMessageRead = ({ ids, conversationId, status, readAt }) => {
+            if (Array.isArray(ids)) {
+                ids.forEach(messageId => {
+                    dispatch(updateMessageStatus({ messageId, messageStatus: status || "read" }));
+                    dispatch(updateLastMessageStatus({ messageId, messageStatus: status || "read" }));
+                });
+            } else if (conversationId) {
+                // Batch update for whole conversation
+                dispatch(markMessagesSeen(conversationId));
+                // Reset unread count when messages are read
+                dispatch(updateUnreadCount({ conversationId, unreadCount: 0 }));
+            }
+        };
+
+        const handleMessageStatusUpdate = ({ messageId, messageStatus }) => {
+            // Legacy handler for backward compatibility
             if (messageStatus === "read") {
                 dispatch(markMessagesSeen(messageId));
             } else {
-                // Handle "sent", "delivered", or any other status
                 dispatch(updateMessageStatus({ messageId, messageStatus }));
             }
-
-            // Update the status in the chat list (lastMessage)
             dispatch(updateLastMessageStatus({ messageId, messageStatus }));
         };
 
         const handleUserStatus = ({ userId, isOnline }) => {
-            // console.log("📡 User status update:", { userId, isOnline });
+            console.log("📡 User status update:", { userId, isOnline });
             dispatch(setOnlineUsers({ userId, isOnline }));
         };
 
         const handleOnlineUsers = (onlineUserIds) => {
-            // console.log("📡 Online users list:", onlineUserIds);
+            console.log("📡 Online users list:", onlineUserIds);
             dispatch(setInitialOnlineUsers(onlineUserIds.map(id => String(id))));
         };
 
@@ -169,7 +197,11 @@ const SocketManager = () => {
         };
 
         socket.on("receive_message", handleReceiveMessage);
+        // Listen to all status update events
         socket.on("message_Status_update", handleMessageStatusUpdate);
+        socket.on("message_delivered", handleMessageDelivered);
+        socket.on("message_read", handleMessageRead);
+        socket.on("messages_read", handleMessageRead);
         socket.on("user_status", handleUserStatus);
         socket.on("online_users", handleOnlineUsers);
         socket.on("reaction_update", handleReactionUpdate);
@@ -186,6 +218,9 @@ const SocketManager = () => {
         return () => {
             socket.off("receive_message", handleReceiveMessage);
             socket.off("message_Status_update", handleMessageStatusUpdate);
+            socket.off("message_delivered", handleMessageDelivered);
+            socket.off("message_read", handleMessageRead);
+            socket.off("messages_read", handleMessageRead);
             socket.off("user_status", handleUserStatus);
             socket.off("online_users", handleOnlineUsers);
             socket.off("reaction_update", handleReactionUpdate);

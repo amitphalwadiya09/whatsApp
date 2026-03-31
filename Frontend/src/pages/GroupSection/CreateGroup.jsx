@@ -1,5 +1,5 @@
 import { IconButton } from '@mui/material';
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { setChats, selectChat } from "../../Slices/chatSlice"
@@ -13,13 +13,11 @@ import {
     Avatar,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { useEffect } from "react";
 import { getAllUsers } from '../../services/userService';
 import { Divider } from "@mui/material";
+import { getConsistentColor } from "../../utils/RandomColor";
 
 const CreateGroup = ({ onClose }) => {
-
-
     const [search, setSearch] = useState("");
     const [groupName, setGroupName] = useState("");
     const [allUser, setAllUser] = useState([]);
@@ -28,6 +26,23 @@ const CreateGroup = ({ onClose }) => {
     const [inputValue, setInputValue] = useState("");
     const dispatch = useDispatch();
     const chats = useSelector((state) => state.chats.chats);
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (
+                containerRef.current &&
+                !containerRef.current.contains(event.target)
+            ) {
+                onClose();
+            }
+        }
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [onClose]);
 
     const handleSearch = async (value) => {
         setSearch(value);
@@ -145,6 +160,7 @@ const CreateGroup = ({ onClose }) => {
     return (
         <>
             <Box
+                ref={containerRef}
                 sx={{
                     position: "absolute",
                     top: 0,
@@ -275,6 +291,7 @@ const CreateGroup = ({ onClose }) => {
                 </Box>
                 <Box
                     component="ul"
+                    onClick={(e) => e.stopPropagation()}
                     sx={{
                         px: 3,
                         overflowY: "auto",
@@ -315,7 +332,12 @@ const CreateGroup = ({ onClose }) => {
 
                                         <Avatar
                                             src={user.profilePicture}
-                                            sx={{ width: 40, height: 40, mr: 2 }}
+                                            sx={{
+                                                width: 40,
+                                                height: 40,
+                                                mr: 2,
+                                                bgcolor: user.profilePicture ? "transparent" : getConsistentColor(user._id)
+                                            }}
                                         >
                                             {user.username?.charAt(0)}
                                         </Avatar>

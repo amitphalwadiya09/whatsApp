@@ -1,11 +1,11 @@
 import express from "express";
 import { deleteMessage, getConversation, getMessages, groupMessageSeen, markAsRead, sendMessage } from "../Controller/chatController.js";
-import { multerMiddleware } from "../Config/cloudinaryconfig.js";
+import { multerMiddleware, uploadFileMiddleware } from "../Config/cloudinaryconfig.js";
 import protect from "../middleware/Protect.js";
 
 const chatRouter = express.Router();
 
-chatRouter.post('/send-message', protect, multerMiddleware, sendMessage)
+chatRouter.post('/send-message', protect, uploadFileMiddleware, sendMessage)
 chatRouter.get('/conversations', protect, getConversation)
 chatRouter.get('/conversations/:conversationId/messages', protect, getMessages)
 

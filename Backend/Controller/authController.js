@@ -236,24 +236,33 @@ export const searchUser = async (req, res) => {
 
 export const deleteUser = async (req, res) => {
     const userId = req.user._id;
-    // console.log(`user id is ${userId}`)
     try {
-        await User.findByIdAndUpdate(userId, {
-            email: `deleted_${userId}@deleted.com`,
-            phoneNumber: null,
-            username: "Deleted User",
-            password: null,
-            profilePicture: null,
-            about: null,
-            isVerified: false,
-            isDeleted: true
-        });
+        if (!userId) {
+            return response(res, 400, "User ID is required");
+        }
+        const deletedUser = await User.findByIdAndUpdate(
+            userId,
+            {
+                email: `deleted_${userId}@deleted.com`,
+                phoneNumber: undefined,
+                username: "Deleted User",
+                profilePicture: null,
+                about: null,
+                isVerified: false,
+                isDeleted: true,
+                isOnline: false
+            },
+            { returnDocument: "after", runValidators: true }
+        );
 
+        if (!deletedUser) {
+            return response(res, 404, "User not found");
+        }
 
-        return response(res, 200, "Account deleted successfully");
+        return response(res, 200, "Account deleted successfully", { user: deletedUser });
 
     } catch (error) {
-        console.error(error);
+        console.error("Delete user error:", error);
         return response(res, 500, "Internal server error");
     }
 };

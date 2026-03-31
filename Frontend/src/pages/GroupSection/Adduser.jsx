@@ -1,6 +1,6 @@
 
 import { Divider, IconButton } from '@mui/material';
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { setChats, selectChat } from "../../Slices/chatSlice"
@@ -14,8 +14,9 @@ import {
     Avatar,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { useEffect } from 'react';
+
 import { getAllUsers } from '../../services/userService';
+import { getConsistentColor } from "../../utils/RandomColor";
 
 const Adduser = ({ onClose }) => {
     const [search, setSearch] = useState("");
@@ -27,6 +28,23 @@ const Adduser = ({ onClose }) => {
     const selectedChat = useSelector((state) => state.chats.selectedChat);
     const currentUser = JSON.parse(localStorage.getItem("user"));
     const isAdmin = selectedChat?.groupAdmin?._id === currentUser?._id;
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (
+                containerRef.current &&
+                !containerRef.current.contains(event.target)
+            ) {
+                onClose();
+            }
+        }
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [onClose]);
 
     useEffect(() => {
         const fetchAllUsers = async () => {
@@ -163,6 +181,7 @@ const Adduser = ({ onClose }) => {
     return (
         <>
             <Box
+                ref={containerRef}
                 sx={{
                     position: "absolute",
                     top: 0,
@@ -249,6 +268,7 @@ const Adduser = ({ onClose }) => {
                 </Box>
                 <Box
                     component="ul"
+                    onClick={(e) => e.stopPropagation()}
                     sx={{
                         px: 3,
                         overflowY: "auto",
@@ -288,7 +308,12 @@ const Adduser = ({ onClose }) => {
                                     >
                                         {/* Avatar + online indicator */}
                                         <Box sx={{ position: "relative" }}>
-                                            <Avatar src={user.profilePicture} />
+                                            <Avatar
+                                                src={user.profilePicture}
+                                                sx={{
+                                                    bgcolor: user.profilePicture ? "transparent" : getConsistentColor(user._id)
+                                                }}
+                                            />
                                             {user.isOnline && (
                                                 <Box
                                                     sx={{

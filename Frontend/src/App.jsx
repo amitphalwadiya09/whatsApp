@@ -47,11 +47,11 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/home" element={<Home />} />
+            <Route path="/" element={<Home />} />
             <Route path="/user-profile" element={<UserProfile />} />
             <Route path="/status" element={<StatusPage />} />
             <Route path="/setting" element={<SettingPage />} />
-            <Route path="*" element={<Navigate to="/home" />} />
+            <Route path="*" element={<Navigate to="/" />} />
           </Route>
 
         </Routes>

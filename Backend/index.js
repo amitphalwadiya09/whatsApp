@@ -10,6 +10,7 @@ import http from "http";
 import initializeSocket from "./Service/socketService.js";
 import statusRouter from "./Routes/statusRoute.js";
 import conversationRouter from "./Routes/conversationRoute.js";
+import compression from "compression";
 
 dotenv.config();
 
@@ -17,47 +18,64 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 const frontendURL = process.env.FORNTEND_URL || "http://localhost:5173";
 
+// ✅ Compression middleware (reduce payload size)
+app.use(compression());
 
-
-
+// ✅ CORS with optimized settings
 app.use(cors({
     origin: frontendURL,
-    credentials: true
-}))
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
-
-//middleware
-app.use(express.json())
+// ✅ Request body parsing (optimized)
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(cookieParser());
-app.use(bodyParser.urlencoded({ extended: true }));
 
-//database connection
+// ✅ Database connection
 connectDB();
 
-// serve local uploads (images/videos)
-app.use("/uploads", express.static("uploads"));
+// ✅ Serve local uploads (with caching)
+app.use("/uploads", express.static("uploads", { maxAge: "1d" }));
 
-//create server
+// ✅ Create HTTP server with Socket.IO
 const server = http.createServer(app);
-
 const io = initializeSocket(server);
 
-
-//apply socket middleware
+// ✅ Attach i/o and socket map to requests
 app.use((req, res, next) => {
     req.io = io;
-    req.socketUserMap = io.socketUserMap
+    req.socketUserMap = io.socketUserMap;
     next();
-})
+});
 
-//Routes
-
-app.use('/api/auth', authRouter)
-app.use('/api/chat', chatRouter)
-app.use('/api/status', statusRouter)
+// ✅ Routes
+app.use('/api/auth', authRouter);
+app.use('/api/chat', chatRouter);
+app.use('/api/status', statusRouter);
 app.use("/api/conversations", conversationRouter);
 
+// ✅ Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({ status: "✅ Server is running" });
+});
+
+// ✅ 404 handler
+app.use((req, res) => {
+    res.status(404).json({ status: 404, message: "Route not found" });
+});
+
+// ✅ Error handler
+app.use((err, req, res, next) => {
+    console.error("❌ Server Error:", err);
+    res.status(500).json({ status: 500, message: "Internal server error" });
+});
+
+// ✅ Start server
 server.listen(PORT, () => {
-    console.log("server is running")
-})
+    console.log(`\n🚀 WhatsApp Clone Server running on port ${PORT}`);
+    console.log(`📱 Frontend URL: ${frontendURL}\n`);
+});
 

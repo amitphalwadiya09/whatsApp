@@ -10,31 +10,73 @@ const SettingPage = () => {
 
     return (
         <>
-            <Box sx={{ display: "flex", width: "100%", height: "100vh" }}>
-
-
+            <Box sx={{
+                display: "flex",
+                width: "100%",
+                height: "100vh",
+                background: "linear-gradient(135deg, #f0f2f5 0%, #e9ecef 100%)"
+            }}>
                 <Box sx={{
                     width: isMobile ? "100%" : "40%",
                     minWidth: isMobile ? "100%" : 280,
-                    left: isMobile ? 0 : "auto", p: 4, bgcolor: "rgb(241, 242, 245)",
-                    overflowY: "auto"
+                    left: isMobile ? 0 : "auto",
+                    p: 4,
+                    bgcolor: "transparent",
+                    overflowY: "auto",
+                    "&::-webkit-scrollbar": {
+                        width: "6px",
+                    },
+                    "&::-webkit-scrollbar-track": {
+                        background: "transparent",
+                    },
+                    "&::-webkit-scrollbar-thumb": {
+                        background: "rgba(0,168,132,0.3)",
+                        borderRadius: "3px",
+                        "&:hover": {
+                            background: "rgba(0,168,132,0.5)",
+                        }
+                    },
                 }}>
-
-                    {/* Profile Header */}
-                    <Box sx={{ display: "flex", gap: 2, flexDirection: "column", textAlign: "center", justifyContent: "center" }}>
+                    {/* Profile Header Card */}
+                    <Box sx={{
+                        bgcolor: "rgba(255,255,255,0.95)",
+                        backdropFilter: "blur(10px)",
+                        borderRadius: 4,
+                        p: 4,
+                        mb: 3,
+                        boxShadow: "0 8px 32px rgba(0,0,0,0.08)",
+                        textAlign: "center"
+                    }}>
                         <Avatar
-
-                            sx={{ width: 120, height: 120, mt: 2, m: "auto" }}
+                            sx={{
+                                width: 140,
+                                height: 140,
+                                m: "auto",
+                                mb: 2,
+                                fontSize: 56,
+                                border: "3px solid #00a884",
+                                boxShadow: "0 8px 25px rgba(0,168,132,0.3)",
+                                bgcolor: userInfo?.profilePicture ? "transparent" : getConsistentColor(userInfo?._id)
+                            }}
                             src={`${userInfo?.profilePicture}`}
                         >
                             {userInfo?.username?.charAt(0).toUpperCase()}
                         </Avatar>
-                        <Typography sx={{ mt: 2 }} variant="h6">
+                        <Typography sx={{
+                            fontWeight: 700,
+                            fontSize: 22,
+                            color: "#111b21"
+                        }}>
                             {userInfo?.username}
                         </Typography>
+                        <Typography sx={{
+                            fontSize: 14,
+                            color: "#54656f",
+                            mt: 1
+                        }}>
+                            Profile Settings
+                        </Typography>
                     </Box>
-
-                    <Divider sx={{ my: 3 }} />
 
                     <Box>
                         <SettingItem>

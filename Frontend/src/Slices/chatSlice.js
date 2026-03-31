@@ -109,17 +109,33 @@ const chatSlice = createSlice({
         },
         updateLastMessageStatus: (state, action) => {
             const { messageId, messageStatus } = action.payload;
+            const messageIdStr = messageId?.toString ? messageId.toString() : String(messageId);
 
             state.chats.forEach((chat) => {
-                if (chat.lastMessage?._id === messageId) {
-                    chat.lastMessage.messageStatus = messageStatus;
+                if (chat.lastMessage) {
+                    const lastMsgId = chat.lastMessage._id?.toString ? 
+                        chat.lastMessage._id.toString() : 
+                        String(chat.lastMessage._id);
+                    
+                    if (lastMsgId === messageIdStr) {
+                        chat.lastMessage.messageStatus = messageStatus;
+                    }
                 }
             });
+        },
+        updateUnreadCount: (state, action) => {
+            const { conversationId, unreadCount } = action.payload;
+            const chatIndex = state.chats.findIndex(
+                (c) => c._id === conversationId
+            );
+            if (chatIndex !== -1) {
+                state.chats[chatIndex].unreadCount = unreadCount;
+            }
         }
     },
 
 });
 
-export const { setChats, addOrUpdateChat, removeChat, selectChat, updateLastMessage, setCurrentUserId, updateLastMessageStatus } = chatSlice.actions;
+export const { setChats, addOrUpdateChat, removeChat, selectChat, updateLastMessage, setCurrentUserId, updateLastMessageStatus, updateUnreadCount } = chatSlice.actions;
 
 export default chatSlice.reducer;

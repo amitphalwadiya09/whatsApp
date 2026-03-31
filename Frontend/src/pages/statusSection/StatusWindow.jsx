@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { Box, Typography, IconButton, Avatar, LinearProgress } from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteIcon from '@mui/icons-material/Delete';
+import { getConsistentColor } from "../../utils/RandomColor";
 
 const StatusWindow = ({ status, onBack }) => {
     const currentUser = JSON.parse(localStorage.getItem("user"));
@@ -91,7 +92,14 @@ const StatusWindow = ({ status, onBack }) => {
             {/* Header */}
             <Box sx={{ display: "flex", alignItems: "center", p: 2, pt: 3, position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, background: "linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%)" }}>
                 <IconButton onClick={onBack} sx={{ color: "white" }}><ArrowBackIcon /></IconButton>
-                <Avatar src={status.user?.profilePicture} sx={{ ml: 1, mr: 2 }} />
+                <Avatar
+                    src={status.user?.profilePicture}
+                    sx={{
+                        ml: 1,
+                        mr: 2,
+                        bgcolor: status.user?.profilePicture ? "transparent" : getConsistentColor(status.user?._id)
+                    }}
+                />
                 <Typography variant="subtitle1" sx={{ flex: 1, fontWeight: 500, textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>{status.user?.username || status.user?.name}</Typography>
                 {isMine && (
                     <IconButton onClick={handleDelete} sx={{ color: "white", textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}><DeleteIcon /></IconButton>

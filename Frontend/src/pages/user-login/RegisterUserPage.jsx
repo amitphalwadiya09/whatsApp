@@ -104,7 +104,7 @@ const RegisterUserPage = () => {
                 }));
 
                 localStorage.setItem("user", JSON.stringify(updatedUser));
-                navigate("/home");
+                navigate("/");
             }
 
         } catch (error) {

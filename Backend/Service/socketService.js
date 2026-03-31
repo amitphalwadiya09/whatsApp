@@ -4,41 +4,48 @@ import Message from "../Models/Message.model.js";
 import Conversation from "../Models/Conversation.model.js";
 
 const onlineUsers = new Map();
-
 const typingUsers = new Map();
-
 const offlineTimeouts = new Map();
+const socketUserMap = new Map();
 
 const initializeSocket = (server) => {
     const io = new Server(server, {
         cors: {
-            origin: process.env.FRONTEND_URL || "http://localhost:5173",
+            origin: process.env.FORNTEND_URL || "http://localhost:5173",
             credentials: true,
             methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         },
-        pingTimeout: 5000,
+        pingTimeout: 60000,
+        pingInterval: 25000,
+        maxHttpBufferSize: 1e6,
+        transports: ["websocket", "polling"],
+        allowEIO3: true,
     });
+
+    io.socketUserMap = socketUserMap;
 
 
     io.on("connection", (socket) => {
-        console.log(`user connected with this id${socket.id} `);
+        console.log(`✅ Socket connected: ${socket.id}`);
         let userId = null;
 
         socket.on("join chat", (conversationId) => {
-            socket.join(conversationId);
+            if (conversationId) socket.join(conversationId);
         });
 
 
         socket.on("user_connected", async (connectingUserId) => {
             try {
                 userId = connectingUserId;
-                onlineUsers.set(userId, socket.id);
-                socket.join(userId);
-                //update backend
+                const userIdStr = userId.toString();
+                onlineUsers.set(userIdStr, socket.id);
+                socketUserMap.set(userIdStr, socket.id);
+                socket.join(userIdStr);
+                //update backend - use lean for performance
                 await User.findByIdAndUpdate(userId, {
                     isOnline: true,
-                    lastSeen: new Date(),
-                });
+                    lastSeen: Date.now(),
+                }, { new: false });
 
                 // Clear any pending offline timeout
                 if (offlineTimeouts.has(userId)) {
@@ -50,7 +57,9 @@ const initializeSocket = (server) => {
                 const pendingMessages = await Message.find({
                     receiver: userId,
                     messageStatus: "sent"
-                }).populate("sender", "username profilePicture");
+                })
+                    .populate("sender", "username profilePicture")
+                    .lean();
 
                 if (pendingMessages && pendingMessages.length > 0) {
                     // Update all pending messages to delivered
@@ -59,13 +68,13 @@ const initializeSocket = (server) => {
                         { $set: { messageStatus: "delivered" } }
                     );
 
-                    // Notify sender about delivered status for each message
+                    // Notify sender about delivered status for each message (batch)
                     pendingMessages.forEach((message) => {
-                        const senderSocketId = onlineUsers.get(message.sender._id.toString());
+                        const senderSocketId = onlineUsers.get(message.sender._id?.toString());
                         if (senderSocketId) {
-                            io.to(senderSocketId).emit("message_Status_update", {
-                                messageId: message._id.toString(),
-                                messageStatus: "delivered"
+                            io.to(senderSocketId).emit("message_delivered", {
+                                ids: [message._id],
+                                status: "delivered"
                             });
                         }
                     });
@@ -90,28 +99,33 @@ const initializeSocket = (server) => {
             }
         })
 
-        //return online status of requested user 
-
+        //return online status of requested user (fast sync)
         socket.on("get_user_status", (requestedUserId, callback) => {
-            const isOnline = onlineUsers.has(requestedUserId);
-            callback({
+            const userIdStr = requestedUserId.toString();
+            const isOnline = onlineUsers.has(userIdStr);
+            if (callback) callback({
                 userId: requestedUserId,
                 isOnline,
-                lastSeen: isOnline ? new Date() : null,
-            })
+                lastSeen: isOnline ? Date.now() : null,
+            });
         })
 
-        //forword message to receiver if online
+        //forward message to receiver if online (optimized)
         socket.on("send_message", async (messageData) => {
             try {
                 // Determine message status based on receiver's online status
-                const receiverId = messageData.receiver;
-                const isReceiverOnline = onlineUsers.has(receiverId.toString());
+                const receiverId = messageData.receiver?.toString ? messageData.receiver.toString() : messageData.receiver;
+                const isReceiverOnline = onlineUsers.has(receiverId);
                 const messageStatus = isReceiverOnline ? "delivered" : "sent";
 
                 // Create message with automatic status determination
                 const message = await Message.create({
-                    ...messageData,
+                    sender: messageData.sender,
+                    receiver: messageData.receiver,
+                    conversation: messageData.conversation,
+                    content: messageData.content,
+                    contentType: messageData.contentType,
+                    imageOrVideoUrl: messageData.imageOrVideoUrl,
                     messageStatus: messageStatus
                 });
 
@@ -139,7 +153,7 @@ const initializeSocket = (server) => {
                             const pSocketId = onlineUsers.get(participantId.toString());
                             if (pSocketId) {
                                 io.to(pSocketId).emit("receive_message", populatedMessage);
-                                
+
                                 // Emit delivered status update to receiver
                                 if (messageStatus === "delivered") {
                                     io.to(pSocketId).emit("message_Status_update", {
@@ -160,14 +174,16 @@ const initializeSocket = (server) => {
             }
         });
 
-        //update message read status
+        //update message read status (bulk operation)
         socket.on("message_read", async ({ messageIds, senderId }) => {
             try {
-                // Update all messages to "read" status and add user to messageSeenBy
-                await Message.updateMany(
+                if (!messageIds?.length) return;
+
+                // Bulk update for better performance
+                const result = await Message.updateMany(
                     { _id: { $in: messageIds }, messageStatus: { $ne: "read" } },
-                    { 
-                        $set: { messageStatus: "read" },
+                    {
+                        $set: { messageStatus: "read", readAt: Date.now() },
                         $addToSet: { messageSeenBy: userId }
                     }
                 );
@@ -179,14 +195,14 @@ const initializeSocket = (server) => {
                     }
                 }
 
-                // Notify sender about read status for each message
-                const senderSocketId = onlineUsers.get(senderId);
-                if (senderSocketId) {
-                    messageIds.forEach((messageId) => {
-                        io.to(senderSocketId).emit("message_Status_update", {
-                            messageId: messageId.toString(),
-                            messageStatus: "read"
-                        });
+                // Notify sender about read status (batch emit)
+                const senderIdStr = senderId?.toString ? senderId.toString() : senderId;
+                const senderSocketId = onlineUsers.get(senderIdStr);
+                if (senderSocketId && result.modifiedCount > 0) {
+                    io.to(senderSocketId).emit("message_read", {
+                        ids: messageIds.map(id => id.toString()),
+                        status: "read",
+                        readAt: Date.now()
                     });
                 }
             } catch (error) {

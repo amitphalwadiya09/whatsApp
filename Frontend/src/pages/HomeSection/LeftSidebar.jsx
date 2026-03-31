@@ -51,7 +51,7 @@ const LeftSidebar = ({ isMobile }) => {
             }}>
                 {/* WhatsApp Icon */}
                 <Box
-                    onClick={() => navigate('/home')}
+                    onClick={() => navigate('/')}
                     sx={{
                         display: "flex",
                         alignItems: "center",
@@ -106,7 +106,7 @@ const LeftSidebar = ({ isMobile }) => {
 
                 {/* Chatbot Animation */}
                 <Box
-                    onClick={() => navigate('/home')}
+                    onClick={() => navigate('/')}
                     sx={{
                         display: "flex",
                         alignItems: "center",

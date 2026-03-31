@@ -145,7 +145,7 @@ const LoginUserPage = () => {
                 toast.success("OTP verified");
 
                 if (user?.username && user.username.trim() !== "") {
-                    navigate("/home");
+                    navigate("/");
                 } else {
                     navigate("/register");
                 }

@@ -5,23 +5,27 @@ import User from "../Models/User.Model.js";
 import response from "../Utils/responseHandler.js";
 
 
-// SEND MESSAGE
+// SEND MESSAGE (Optimized)
 export const sendMessage = async (req, res) => {
     try {
-
         const { senderId, receiverId, content } = req.body;
         const file = req.file;
-        console.log(receiverId, senderId, content, file)
+
+        if (!senderId || !receiverId) {
+            return response(res, 400, "senderId and receiverId required");
+        }
+
         const participants = [senderId, receiverId].sort();
 
         let conversation = await Conversation.findOne({
-            participants: { $all: participants, $size: 2 }
+            participants: { $all: participants, $size: 2 },
+            isGroupChat: false
         });
 
         if (!conversation) {
             conversation = await Conversation.create({
                 participants,
-                unreadCount: 0,
+                unreadCount: 1,
                 isGroupChat: false
             });
         }
@@ -30,7 +34,6 @@ export const sendMessage = async (req, res) => {
         let contentType = null;
 
         if (file) {
-
             const uploadFile = await uploadFileToCloudinary(file);
 
             if (!uploadFile?.secure_url) {
@@ -38,27 +41,19 @@ export const sendMessage = async (req, res) => {
             }
 
             imageOrVideoUrl = uploadFile.secure_url;
-
-            if (file.mimetype.startsWith("image")) {
-                contentType = "image";
-            }
-            else if (file.mimetype.startsWith("video")) {
-                contentType = "video";
-            }
-            else {
-                return response(res, 400, "unsupported file type");
-            }
-
+            contentType = file.mimetype.startsWith("image") ? "image" :
+                file.mimetype.startsWith("video") ? "video" : "file";
         } else if (content?.trim()) {
             contentType = "text";
         } else {
             return response(res, 400, "message content required");
         }
 
-        // Check if receiver is online to determine initial message status
-        const receiver = await User.findById(receiverId);
-        const initialMessageStatus = receiver?.isOnline ? "delivered" : "sent";
+        // Fast query to check receiver status
+        const receiverStatus = await User.findById(receiverId).select("isOnline").lean();
+        const initialMessageStatus = receiverStatus?.isOnline ? "delivered" : "sent";
 
+        // Create message
         const message = await Message.create({
             conversation: conversation._id,
             sender: senderId,
@@ -69,127 +64,124 @@ export const sendMessage = async (req, res) => {
             messageStatus: initialMessageStatus
         });
 
-        conversation.lastMessage = message._id;
+        // Update conversation last message
+        await Conversation.findByIdAndUpdate(
+            conversation._id,
+            {
+                lastMessage: message._id,
+                unreadCount: receiverId === senderId ? 0 : 1
+            }
+        );
 
-        if (receiverId !== senderId) {
-            conversation.unreadCount = (conversation.unreadCount || 0) + 1;
-        }
-
-        await conversation.save();
-
-        const updatedConversation = await Conversation.findById(conversation._id)
-            .populate("participants", "username profilePicture isOnline")
-            .populate({
-                path: "lastMessage",
-                populate: {
-                    path: "sender receiver",
-                    select: "username profilePicture isOnline"
-                }
-            });
-
-
+        // Prepare compact response
         const populatedMessage = await Message.findById(message._id)
-            .populate("sender", "username profilePicture")
-            .populate("receiver", "username profilePicture");
+            .populate("sender", "username profilePicture isOnline")
+            .populate("receiver", "username profilePicture isOnline");
 
+        // Emit via Socket.IO
         if (req.io && req.socketUserMap) {
-
-            participants.forEach((participantId) => {
-                const socketId = req.socketUserMap.get(participantId.toString());
-
-                if (socketId) {
-                    req.io.to(socketId).emit("conversation_updated", updatedConversation);
-                }
-            });
-        }
-
-        if (req.io && req.socketUserMap) {
-            const receiverSocketId = req.socketUserMap.get(receiverId);
-
+            // Emit to receiver
+            const receiverSocketId = req.socketUserMap.get(receiverId.toString());
             if (receiverSocketId) {
                 req.io.to(receiverSocketId).emit("receive_message", populatedMessage);
 
-                // Emit delivered status update if receiver is online
-                if (initialMessageStatus === "delivered") {
-                    req.io.to(receiverSocketId).emit("message_Status_update", {
-                        messageId: message._id.toString(),
-                        messageStatus: "delivered"
-                    });
-                }
+                // Emit status update
+                req.io.to(receiverSocketId).emit("message_delivered", {
+                    ids: [message._id.toString()],
+                    conversationId: conversation._id.toString(),
+                    status: initialMessageStatus
+                });
+            }
+
+            // Emit to sender with confirmation
+            const senderSocketId = req.socketUserMap.get(senderId.toString());
+            if (senderSocketId) {
+                req.io.to(senderSocketId).emit("message_send", populatedMessage);
             }
         }
 
-        return response(res, 201, "message sent", populatedMessage);
+
+        return response(res, 201, "message sent", {
+            _id: populatedMessage._id,
+            conversationId: conversation._id,
+            messageStatus: initialMessageStatus,
+            createdAt: populatedMessage.createdAt
+        });
 
     } catch (error) {
-
         console.error(error);
         return response(res, 500, "cannot send message");
     }
 };
 
-// GET MESSAGES
-export const getMessages = async (req, res) => {
 
+// GET MESSAGES (Optimized with pagination)
+export const getMessages = async (req, res) => {
     const { conversationId } = req.params;
+    const { page = 1, limit = 50 } = req.query;
     const userId = req.user._id;
 
     try {
-
-        const conversation = await Conversation.findById(conversationId);
+        const conversation = await Conversation.findById(conversationId).lean();
 
         if (!conversation) {
             return response(res, 404, "conversation not found");
         }
 
-        if (!conversation.participants.includes(userId)) {
+        if (!conversation.participants.some(p => p.toString() === userId.toString())) {
             return response(res, 403, "not authorized");
         }
 
+        // Pagination for better performance
+        const skip = (page - 1) * limit;
         const messages = await Message.find({ conversation: conversationId })
-            .populate("sender", "username profilePicture")
-            .populate("receiver", "username profilePicture")
-            .sort({ createdAt: 1 });
+            .populate("sender", "username profilePicture isOnline")
+            .populate("receiver", "username profilePicture isOnline")
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(Number(limit));
 
-
-        const unreadMessages = await Message.find({
-            conversation: conversationId,
-            receiver: userId,
-            messageStatus: { $in: ["send", "delivered", "seen"] }
-        });
-
-        if (unreadMessages.length > 0) {
-            const messageIds = unreadMessages.map(m => m._id);
-            await Message.updateMany(
-                { _id: { $in: messageIds } },
-                { $set: { messageStatus: "read" } }
-            );
-
-            if (req.io && req.socketUserMap) {
-                const uniqueSenders = [...new Set(unreadMessages.map(m => m.sender.toString()))];
-                uniqueSenders.forEach(senderId => {
-                    const senderSocket = req.socketUserMap.get(senderId);
-                    if (senderSocket) {
-                        unreadMessages
-                            .filter(m => m.sender.toString() === senderId)
-                            .forEach(msg => {
-                                req.io.to(senderSocket).emit("message_Status_update", {
-                                    messageId: msg._id,
-                                    messageStatus: "read"
-                                });
-                            });
-                    }
-                });
+        // Bulk update unread messages (fast operation)
+        const result = await Message.updateMany(
+            {
+                conversation: conversationId,
+                receiver: userId,
+                messageStatus: { $in: ["sent", "delivered"] }
+            },
+            {
+                $set: { messageStatus: "read", readAt: Date.now() },
+                $addToSet: { messageSeenBy: userId }
             }
+        );
+
+        // Notify senders about read status (batch)
+        if (result.modifiedCount > 0 && req.io && req.socketUserMap) {
+            const uniqueSenders = new Set();
+            messages.forEach(msg => {
+                if (msg.sender && msg.sender._id) {
+                    uniqueSenders.add(msg.sender._id.toString());
+                }
+            });
+
+            uniqueSenders.forEach(senderId => {
+                const senderSocket = req.socketUserMap.get(senderId);
+                if (senderSocket) {
+                    req.io.to(senderSocket).emit("messages_read", {
+                        conversationId,
+                        count: result.modifiedCount,
+                        status: "read",
+                        readAt: Date.now()
+                    });
+                }
+            });
         }
 
-        conversation.unreadCount = 0;
-        await conversation.save();
+        // Reset unread count
+        await Conversation.findByIdAndUpdate(conversationId, { unreadCount: 0 });
 
-        return response(res, 200, "messages retrieved", messages);
+        return response(res, 200, "messages retrieved", messages.reverse());
 
     } catch (error) {
-
         console.error(error);
         return response(res, 500, "cannot get messages");
     }
@@ -271,33 +263,48 @@ export const deleteMessage = async (req, res) => {
     }
 };
 
-//getConversation
+//getConversation (Fixed with proper lastMessage population)
 export const getConversation = async (req, res) => {
     const userId = req.user._id;
     try {
+        // Fetch conversations with full lastMessage details
         let conversations = await Conversation.find({
             participants: userId,
-        }).populate({
-            path: "lastMessage",
-            populate: {
-                path: "sender receiver",
-                select: "username profilePicture"
-            }
-        });
+        })
+            .populate({
+                path: "lastMessage",
+                select: "content contentType messageStatus sender receiver createdAt",
+                populate: {
+                    path: "sender receiver",
+                    select: "username profilePicture isOnline"
+                }
+            })
+            .populate({
+                path: "participants",
+                select: "username profilePicture isOnline lastSeen"
+            })
+            .select("participants lastMessage chatName isGroupChat createdAt updatedAt unreadCount profilePicture")
+            .sort({ updatedAt: -1 })
+            .lean();
 
-        // Sort conversations by lastMessage createdAt timestamp (most recent first)
-        conversations.sort((a, b) => {
-            const aTime = a.lastMessage ? new Date(a.lastMessage.createdAt) : new Date(a.updatedAt);
-            const bTime = b.lastMessage ? new Date(b.lastMessage.createdAt) : new Date(b.updatedAt);
-            return bTime - aTime; // Most recent first
-        });
+        // Ensure lastMessage has default values
+        const enrichedConversations = conversations.map(conv => ({
+            ...conv,
+            lastMessage: conv.lastMessage ? {
+                ...conv.lastMessage,
+                content: conv.lastMessage.content || "",
+                contentType: conv.lastMessage.contentType || "text"
+            } : null
+        }));
 
-        return response(res, 201, "conversation get successfully", conversations)
+        return response(res, 200, "conversations retrieved", enrichedConversations);
+
     } catch (error) {
-        console.error(error)
-        return response(res, 500, 'cannot send a message ')
+        console.error("Error fetching conversations:", error);
+        return response(res, 500, "cannot get conversations");
     }
-}
+};
+
 
 export const groupMessageSeen = async (req, res) => {
     const { messageId } = req.body;

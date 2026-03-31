@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Box, Typography, List, ListItemButton, ListItemAvatar, Avatar, ListItemText, Divider, CircularProgress } from "@mui/material";
 import AddIcon from '@mui/icons-material/Add';
 import { getSocket } from "../../services/chat.service";
+import { getConsistentColor } from "../../utils/RandomColor";
 
 const StatusList = ({ onSelect, selectedStatus }) => {
     const [statuses, setStatuses] = useState([]);
@@ -88,7 +89,12 @@ const StatusList = ({ onSelect, selectedStatus }) => {
                             display: "flex",
                             m: 2
                         }}>
-                            <Avatar src={currentUser?.profilePicture} />
+                            <Avatar
+                                src={currentUser?.profilePicture}
+                                sx={{
+                                    bgcolor: currentUser?.profilePicture ? "transparent" : getConsistentColor(currentUser?._id)
+                                }}
+                            />
                         </Box>
                         {!myStatuses.length && (
                             <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "#25D366", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid white" }}>
@@ -122,7 +128,12 @@ const StatusList = ({ onSelect, selectedStatus }) => {
                                         m: 2,
 
                                     }}>
-                                        <Avatar src={status.user?.profilePicture} />
+                                        <Avatar
+                                            src={status.user?.profilePicture}
+                                            sx={{
+                                                bgcolor: status.user?.profilePicture ? "transparent" : getConsistentColor(status.user?._id)
+                                            }}
+                                        />
                                     </Box>
                                     <Divider />
                                 </ListItemAvatar>

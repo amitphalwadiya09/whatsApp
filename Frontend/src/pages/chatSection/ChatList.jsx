@@ -9,7 +9,7 @@ import { Box, Typography, Avatar, TextField, Divider } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { getSocket } from "../../services/chat.service";
-import { getRandomRGB } from "../../utils/RandomColor";
+import { getRandomRGB, getConsistentColor } from "../../utils/RandomColor";
 
 const ChatList = () => {
     const dispatch = useDispatch();
@@ -115,11 +115,7 @@ const ChatList = () => {
 
     const getMessageStatusIcon = (chat) => {
         const msg = chat?.lastMessage;
-
-        // ❌ Hide for system messages
         if (!msg || msg.contentType === "system") return null;
-
-        // show only if current user is sender
         if (msg.sender?._id !== currentUser._id) return null;
 
         switch (msg.messageStatus) {
@@ -135,15 +131,40 @@ const ChatList = () => {
     };
 
     const getLastMessageText = (chat, otherUser) => {
-        const msg = chat?.lastMessage;
-        if (!msg) return otherUser?.about || "No messages yet";
+        try {
+            const msg = chat?.lastMessage;
+            
+            // If no message, show user's about
+            if (!msg) {
+                return otherUser?.about || "No messages yet";
+            }
 
-        // ✅ Always show system message content
-        if (msg.contentType === "system") {
-            return msg.content;
+            // Handle system messages
+            if (msg.contentType === "system") {
+                return msg.content || "System message";
+            }
+
+            // Handle different content types
+            if (msg.contentType === "image") {
+                return "🖼️ Image";
+            } else if (msg.contentType === "video") {
+                return "🎥 Video";
+            } else if (msg.contentType === "audio") {
+                return "🎵 Audio";
+            } else if (msg.contentType === "file") {
+                return "📎 File";
+            }
+
+            // Return text message content
+            if (msg.content) {
+                return msg.content.length > 50 ? msg.content.substring(0, 50) + "..." : msg.content;
+            }
+
+            return otherUser?.about || "No messages yet";
+        } catch (error) {
+            console.error("Error in getLastMessageText:", error);
+            return otherUser?.about || "No messages yet";
         }
-
-        return msg.content || otherUser?.about || "No messages yet";
     };
 
     return (
@@ -231,8 +252,14 @@ const ChatList = () => {
                                         borderBottom: "1px solid #e9edef",
                                     }}
                                 >
-                                    <Avatar sx={{ bgcolor: !isGroup && otherUser?.profilePicture ? "transparent" : getRandomRGB() }}
-                                        src={isGroup ? groupPic : otherUser?.profilePicture} />
+                                    <Avatar
+                                        sx={{
+                                            bgcolor: (isGroup ? !groupPic : !otherUser?.profilePicture)
+                                                ? getConsistentColor(isGroup ? chat._id : otherUser?._id)
+                                                : "transparent"
+                                        }}
+                                        src={isGroup ? groupPic : otherUser?.profilePicture}
+                                    />
 
                                     {/* TEXT AREA */}
                                     <Box sx={{ flex: 1, ml: 2 }}>
@@ -241,7 +268,7 @@ const ChatList = () => {
                                         </Typography>
 
                                         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                            {!chat.contentType == "system" ? getMessageStatusIcon(chat) : null}
+                                            {chat.lastMessage?.contentType !== "system" ? getMessageStatusIcon(chat) : null}
                                             <Typography
                                                 sx={{
                                                     fontSize: "14px",

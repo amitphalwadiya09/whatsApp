@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Box, Avatar, Typography, Divider } from "@mui/material";
-import { Dialog, DialogTitle, DialogContent, TextField, Button } from "@mui/material";
+import { Dialog, DialogTitle, DialogContent, TextField, Button, DialogActions } from "@mui/material";
 import VpnKeyIcon from "@mui/icons-material/VpnKey";
 import LockIcon from "@mui/icons-material/Lock";
 import ChatIcon from "@mui/icons-material/Chat";
@@ -9,12 +9,15 @@ import StorageIcon from "@mui/icons-material/Storage";
 import HelpIcon from "@mui/icons-material/Help";
 import GroupIcon from "@mui/icons-material/Group";
 import DeleteIcon from "@mui/icons-material/Delete";
+import WarningIcon from "@mui/icons-material/Warning";
 import { deleteAccount, updateUserNumber } from "../../services/userService";
 import { toast } from "react-toastify";
 
 const SettingItem = () => {
 
     const [showNumberAdd, setShowNumberAdd] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [phoneNumber, setPhoneNumber] = useState("");
     const userInfo = JSON.parse(localStorage.getItem("user"));
     const phoneRegex = /^[0-9\s]{10,10}$/;
@@ -70,22 +73,30 @@ const SettingItem = () => {
         },
     ];
 
+    const handleDeleteClick = () => {
+        setShowDeleteConfirm(true);
+    };
+
     const hadleDeleteUser = async () => {
-        const confirmDelete = window.confirm(
-            "Are you sure you want to delete your account?"
-        );
-
-        if (!confirmDelete) return;
-
+        setIsDeleting(true);
         try {
             const res = await deleteAccount();
 
             if (res.status === "success") {
-                localStorage.clear();
-                window.location.href = "/welcome"; // redirect
+                toast.success("Account deleted successfully");
+                setTimeout(() => {
+                    localStorage.clear();
+                    window.location.href = "/welcome"; // redirect
+                }, 1000);
+            } else {
+                toast.error(res.message || "Failed to delete account");
             }
         } catch (error) {
             console.log(error);
+            toast.error("Error deleting account");
+        } finally {
+            setIsDeleting(false);
+            setShowDeleteConfirm(false);
         }
     }
 
@@ -163,7 +174,7 @@ const SettingItem = () => {
                     ...itemStyle,
                     mb: 3
                 }}
-                onClick={hadleDeleteUser}
+                onClick={handleDeleteClick}
             >
                 <Avatar
                     sx={{
@@ -212,6 +223,68 @@ const SettingItem = () => {
                     </Box>
 
                 </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog
+                open={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <Box sx={{
+                    bgcolor: "#ffebee",
+                    display: "flex",
+                    justifyContent: "center",
+                    pt: 2
+                }}>
+                    <WarningIcon sx={{ fontSize: 48, color: "#c62828" }} />
+                </Box>
+                <DialogTitle sx={{ textAlign: "center", fontWeight: 700, color: "#c62828" }}>
+                    Delete Account?
+                </DialogTitle>
+                <DialogContent>
+                    <Typography sx={{ mb: 2 }}>
+                        This action cannot be undone. Your account and all data will be permanently deleted.
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        • All your messages will be deleted
+                        • Your profile will not be recoverable
+                        • Contacts won't be able to reach you
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{ p: 2, gap: 1 }}>
+                    <Button
+                        onClick={() => setShowDeleteConfirm(false)}
+                        variant="outlined"
+                        sx={{
+                            borderColor: "#00a884",
+                            color: "#00a884",
+                            "&:hover": {
+                                borderColor: "#25d366",
+                                bgcolor: "rgba(0,168,132,0.05)"
+                            }
+                        }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={hadleDeleteUser}
+                        variant="contained"
+                        disabled={isDeleting}
+                        sx={{
+                            bgcolor: "#c62828",
+                            "&:hover": {
+                                bgcolor: "#b71c1c"
+                            },
+                            "&:disabled": {
+                                bgcolor: "#ccc"
+                            }
+                        }}
+                    >
+                        {isDeleting ? "Deleting..." : "Delete Account"}
+                    </Button>
+                </DialogActions>
             </Dialog>
 
         </Box>

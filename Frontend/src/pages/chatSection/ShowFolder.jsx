@@ -40,6 +40,7 @@ const ShowFolder = ({ onClose }) => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [openCamera]);
+
     if (!selectedChat || !selectedChat.participants) return;
 
     const handleDocClick = () => {
@@ -58,17 +59,21 @@ const ShowFolder = ({ onClose }) => {
             if (!receiver?._id) return;
 
             const formData = new FormData();
-            formData.append("profilePicture", file);
+            formData.append("file", file);
             formData.append("senderId", currentUser._id);
             formData.append("receiverId", receiver._id);
-            formData.append("conversation", selectedChat._id);
+            formData.append("content", "");
 
             const res = await sendMessage(formData);
+            if (res?.data) {
+                // Message is already handled by the HTTP API and socket emissions
+                // No need to emit send_message again
+            }
             onClose();
-            socket.emit("send_message", res.data);
 
         } catch (error) {
-            console.error(error);
+            console.error("File upload error:", error);
+            alert("Failed to upload file");
         }
     };
 
@@ -83,13 +88,11 @@ const ShowFolder = ({ onClose }) => {
     };
 
     const handleCapture = async () => {
-        const imageSrc = webcamRef.current.getScreenshot();
-
-        const blob = await fetch(imageSrc).then(res => res.blob());
-
-        const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
-
         try {
+            const imageSrc = webcamRef.current.getScreenshot();
+            const blob = await fetch(imageSrc).then(res => res.blob());
+            const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
+
             const receiver = selectedChat.participants.find(
                 (p) => String(p._id) !== String(currentUser._id)
             );
@@ -97,19 +100,24 @@ const ShowFolder = ({ onClose }) => {
             if (!receiver?._id) return;
 
             const formData = new FormData();
-            formData.append("profilePicture", file);
+            formData.append("file", file);
             formData.append("senderId", currentUser._id);
             formData.append("receiverId", receiver._id);
-            formData.append("conversation", selectedChat._id);
+            formData.append("content", "");
 
             const res = await sendMessage(formData);
 
-            socket.emit("send_message", res.data);
-            onClose();
+            if (res?.data) {
+                // Message is already handled by the HTTP API and socket emissions
+                // No need to emit send_message again
+            }
+
             setOpenCamera(false);
+            onClose();
 
         } catch (error) {
-            console.error(error);
+            console.error("Camera capture error:", error);
+            alert("Failed to capture photo");
         }
     };
     return (
@@ -120,7 +128,7 @@ const ShowFolder = ({ onClose }) => {
                     position: "absolute",
                     display: "flex",
                     flexDirection: "column",
-                    bottom: 70,
+                    bottom: 75,
                     left: isMobile ? "90px" : "10%",
                     transform: "translateX(-50%)",
                     p: 1,
