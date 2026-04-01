@@ -100,6 +100,7 @@ const UserProfile = () => {
                     bgcolor: "transparent",
                     overflowY: "auto",
                     display: "flex",
+                    mb: isMobile ? 7 : 0,
                     flexDirection: "column",
                     justifyContent: "flex-start",
                     "&::-webkit-scrollbar": {

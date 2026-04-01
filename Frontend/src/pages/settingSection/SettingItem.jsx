@@ -186,7 +186,7 @@ const SettingItem = () => {
                     <DeleteIcon />
                 </Avatar>
 
-                <Box sx={{ mb: 3 }}>
+                <Box sx={{ mb: 5 }}>
                     <Typography color="error">
                         Delete Account
                     </Typography>
