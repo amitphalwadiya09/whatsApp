@@ -1,10 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { Box, Typography, IconButton } from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
 import bg from "../../assets/bg.jpeg";
 import { deleteMessage, getMessages, markgroupmessageAsSeen, markMessagesAsRead } from "../../services/message.service";
 import { setMessages } from "../../Slices/messageSlice";
-import { useState } from "react";
 import { getSocket } from "../../services/chat.service";
 import MessageMenu from "./MessageMenu";
 
@@ -20,13 +19,19 @@ const ChatWindowChat = () => {
 
     const ITEM_HEIGHT = 48;
 
-    const receiver = selectedChat?.participants?.find(
-        (p) => p?._id && String(p._id) !== String(currentUser?._id)
+    // ✅ Memoize receiver calculation
+    const receiver = useMemo(() => 
+        selectedChat?.participants?.find(
+            (p) => p?._id && String(p._id) !== String(currentUser?._id)
+        ), 
+        [selectedChat?.participants, currentUser?._id]
     );
 
-    const isUserOnline = receiver
-        ? onlineUsers.includes(String(receiver._id))
-        : false;
+    // ✅ Memoize online status
+    const isUserOnline = useMemo(
+        () => receiver ? onlineUsers.includes(String(receiver._id)) : false,
+        [receiver, onlineUsers]
+    );
 
     const [anchorEl, setAnchorEl] = useState(null);
     const [selectedMsg, setSelectedMsg] = useState(null);
@@ -34,30 +39,55 @@ const ChatWindowChat = () => {
     const userInfo = JSON.parse(localStorage.getItem("user"));
     const messagesEndRef = useRef(null);
 
-
     const isGroupChat = selectedChat?.isGroupChat;
     const UserInGroup = selectedChat?.participants?.length || 0;
 
-    const isTyping =
-        !!selectedChat?._id &&
-        !!userInfo?._id &&
-        !!typingUsers[selectedChat._id] &&
-        Object.keys(typingUsers[selectedChat._id]).some(
-            (userId) => userId !== String(userInfo._id)
-        );
+    // ✅ Memoize typing check
+    const isTyping = useMemo(
+        () =>
+            !!selectedChat?._id &&
+            !!userInfo?._id &&
+            !!typingUsers[selectedChat._id] &&
+            Object.keys(typingUsers[selectedChat._id]).some(
+                (userId) => userId !== String(userInfo._id)
+            ),
+        [selectedChat?._id, userInfo?._id, typingUsers]
+    );
 
-    useEffect(() => {
-        const markGroupSeen = async () => {
-            if (!isGroupChat || !messages.length) return;
-
-            const unseenMessages = messages
+    // ✅ Memoize unseen messages for group chat
+    const unseenMessages = useMemo(
+        () => {
+            if (!isGroupChat || !messages.length) return [];
+            return messages
                 .filter(
                     (m) =>
                         !m.messageSeenBy?.includes(userInfo._id) &&
                         String(m.sender) !== String(userInfo._id)
                 )
                 .map((m) => m._id);
+        },
+        [messages, isGroupChat, userInfo._id]
+    );
 
+    // ✅ Memoize unread messages
+    const unreadMessages = useMemo(
+        () => {
+            if (!messages.length || !userInfo?._id) return [];
+            return messages
+                .filter(
+                    (m) =>
+                        (m.receiver === userInfo._id ||
+                            (typeof m.receiver === "object" &&
+                                m.receiver?._id === userInfo._id)) &&
+                        m.messageStatus !== "read"
+                )
+                .map((m) => m._id);
+        },
+        [messages, userInfo._id]
+    );
+
+    useEffect(() => {
+        const markGroupSeen = async () => {
             if (!unseenMessages.length) return;
 
             try {
@@ -68,23 +98,11 @@ const ChatWindowChat = () => {
         };
 
         markGroupSeen();
-    }, [messages]);
+    }, [unseenMessages]);
 
     // mark messages as read for current user
     useEffect(() => {
         const markSeen = async () => {
-            if (!messages.length || !userInfo?._id) return;
-
-            const unreadMessages = messages
-                .filter(
-                    (m) =>
-                        (m.receiver === userInfo._id ||
-                            (typeof m.receiver === "object" &&
-                                m.receiver?._id === userInfo._id)) &&
-                        m.messageStatus !== "read"
-                )
-                .map((m) => m._id);
-
             if (!unreadMessages.length) return;
 
             try {
@@ -95,31 +113,10 @@ const ChatWindowChat = () => {
         };
 
         markSeen();
-    }, [messages, userInfo]);
+    }, [unreadMessages]);
 
-    // fetch messages when chat changes
-    useEffect(() => {
-        const fetchMessages = async () => {
-            if (!selectedChat?._id) return;
-            try {
-                const data = await getMessages(selectedChat._id);
-                dispatch(setMessages(data.data));
-            } catch (error) {
-                console.error("Error fetching messages:", error);
-            }
-        };
-
-        if (selectedChat) {
-            fetchMessages();
-        }
-    }, [selectedChat, dispatch]);
-
-    // auto scroll
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
-
-    const getDateLabel = (date) => {
+    // ✅ Memoize helpers and event handlers
+    const getDateLabel = useCallback((date) => {
         const messageDate = new Date(date);
         const today = new Date();
         const yesterday = new Date();
@@ -145,9 +142,9 @@ const ChatWindowChat = () => {
         }
 
         return messageDate.toLocaleDateString();
-    };
+    }, []);
 
-    const handleDownload = async (url) => {
+    const handleDownload = useCallback(async (url) => {
         try {
             const response = await fetch(url);
             const blob = await response.blob();
@@ -159,7 +156,46 @@ const ChatWindowChat = () => {
         } catch (error) {
             console.error("Download failed", error);
         }
-    };
+    }, []);
+
+    const handleDelete = useCallback(async (messageId) => {
+        await deleteMessage({ messageId });
+        socket.emit("message_delete", {
+            messageId,
+            conversationId: selectedChat._id,
+        });
+    }, [socket, selectedChat._id]);
+
+    const handleMenuOpen = useCallback((event, msg) => {
+        setAnchorEl(event.currentTarget);
+        setSelectedMsg(msg);
+    }, []);
+
+    const handleMenuClose = useCallback(() => {
+        setAnchorEl(null);
+    }, []);
+
+    // fetch messages when chat changes
+    useEffect(() => {
+        const fetchMessages = async () => {
+            if (!selectedChat?._id) return;
+            try {
+                const data = await getMessages(selectedChat._id);
+                dispatch(setMessages(data.data));
+            } catch (error) {
+                console.error("Error fetching messages:", error);
+            }
+        };
+
+        if (selectedChat) {
+            fetchMessages();
+        }
+    }, [selectedChat, dispatch]);
+
+    // auto scroll
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
 
     return (
         <>
@@ -302,10 +338,7 @@ const ChatWindowChat = () => {
                                 >
                                     <IconButton
                                         size="small"
-                                        onClick={(e) => {
-                                            setAnchorEl(e.currentTarget);
-                                            setSelectedMsg(msg);
-                                        }}
+                                        onClick={(e) => handleMenuOpen(e, msg)}
                                         sx={{
                                             position: "absolute",
                                             top: 2,
@@ -320,15 +353,9 @@ const ChatWindowChat = () => {
 
                                     <MessageMenu
                                         anchorEl={anchorEl}
-                                        handleClose={() => setAnchorEl(null)}
+                                        handleClose={handleMenuClose}
                                         selectedMsg={selectedMsg}
-                                        onDelete={async (messageId) => {
-                                            await deleteMessage({ messageId });
-                                            socket.emit("message_delete", {
-                                                messageId,
-                                                conversationId: selectedChat._id,
-                                            });
-                                        }}
+                                        onDelete={handleDelete}
                                     />
 
 

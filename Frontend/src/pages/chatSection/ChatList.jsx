@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import ChatHeader from "./ChatHeader";
 import { getAllUsers } from "../../services/userService";
@@ -63,58 +63,18 @@ const ChatList = () => {
         fetchChats();
     }, [dispatch]);
 
-    // ✅ Create conversation
-    const handleCreateConversation = async (userId) => {
-        const res = await createConversation(userId);
-        const chat = res.data;
-
-        const exists = chats.find((c) => c._id === chat._id);
-        if (!exists) dispatch(addOrUpdateChat(chat));
-
-        socket.emit("join chat", chat._id);
-        dispatch(selectChat(chat));
-        setSearchText("");
-        setIsSearching(false);
-    };
-
-    // ✅ Search logic (merge users + chats)
-    // SEARCH LOGIC (safe)
-    const results = [
-        // Users
-        ...allUsers
-            .filter(user => user?._id !== currentUser._id && (user.username || "").toLowerCase().includes((searchText || "").toLowerCase()))
-            .map(user => {
-                const chat = chats.find(c =>
-                    !c.isGroupChat &&
-                    c.participants.some(p => p._id === user._id)
-                );
-                return { type: "user", user, chat: chat || null };
-            }),
-
-        // Groups
-        ...chats
-            .filter(c => c.isGroupChat && c.participants.some(p => p._id === currentUser._id))
-            .filter(c => (c.chatName || "").toLowerCase().includes((searchText || "").toLowerCase()))
-            .map(c => ({ type: "group", chat: c, user: null })),
-    ];
-
-    // ✅ Typing check
-    const isTyping = (chatId) => {
-        const typing = typingUsers?.[chatId] || {};
-        return Object.keys(typing).some((id) => id !== currentUser?._id);
-    };
-
-    const formatTime = (date) => {
+    // ✅ Memoized helper: format time
+    const formatTime = useCallback((date) => {
         if (!date) return "";
-
         const d = new Date(date);
         return d.toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
         });
-    };
+    }, []);
 
-    const getMessageStatusIcon = (chat) => {
+    // ✅ Memoized helper: get message status icon
+    const getMessageStatusIcon = useCallback((chat) => {
         const msg = chat?.lastMessage;
         if (!msg || msg.contentType === "system") return null;
         if (msg.sender?._id !== currentUser._id) return null;
@@ -129,9 +89,10 @@ const ChatList = () => {
             default:
                 return null;
         }
-    };
+    }, [currentUser._id]);
 
-    const getLastMessageText = (chat, otherUser) => {
+    // ✅ Memoized helper: get last message text
+    const getLastMessageText = useCallback((chat, otherUser) => {
         try {
             const msg = chat?.lastMessage;
 
@@ -154,6 +115,8 @@ const ChatList = () => {
                 return "🎵 Audio";
             } else if (msg.contentType === "file") {
                 return "📎 File";
+            } else if (msg.contentType === "statusReaction") {
+                return " Reacted to status";
             }
 
             // Return text message content
@@ -166,7 +129,59 @@ const ChatList = () => {
             console.error("Error in getLastMessageText:", error);
             return otherUser?.about || "No messages yet";
         }
-    };
+    }, []);
+
+    // ✅ Memoized helper: check if typing
+    const isTyping = useCallback((chatId) => {
+        const typing = typingUsers?.[chatId] || {};
+        return Object.keys(typing).some((id) => id !== currentUser?._id);
+    }, [typingUsers, currentUser?._id]);
+
+    // ✅ Memoized handler: create conversation
+    const handleCreateConversation = useCallback(async (userId) => {
+        const res = await createConversation(userId);
+        const chat = res.data;
+
+        const exists = chats.find((c) => c._id === chat._id);
+        if (!exists) dispatch(addOrUpdateChat(chat));
+
+        socket.emit("join chat", chat._id);
+        dispatch(selectChat(chat));
+        setSearchText("");
+        setIsSearching(false);
+    }, [chats, dispatch, socket]);
+
+    // ✅ Memoize search results (expensive computation)
+    const results = useMemo(() => {
+        return [
+            // Users
+            ...allUsers
+                .filter(user => user?._id !== currentUser._id && (user.username || "").toLowerCase().includes((searchText || "").toLowerCase()))
+                .map(user => {
+                    const chat = chats.find(c =>
+                        !c.isGroupChat &&
+                        c.participants.some(p => p._id === user._id)
+                    );
+                    return { type: "user", user, chat: chat || null };
+                }),
+
+            // Groups
+            ...chats
+                .filter(c => c.isGroupChat && c.participants.some(p => p._id === currentUser._id))
+                .filter(c => (c.chatName || "").toLowerCase().includes((searchText || "").toLowerCase()))
+                .map(c => ({ type: "group", chat: c, user: null })),
+        ];
+    }, [allUsers, chats, currentUser._id, searchText]);
+
+    // ✅ Memoize sorted chats list  
+    const sortedChats = useMemo(() => {
+        return [...chats].sort((a, b) => {
+            const timeA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
+            const timeB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
+            return timeB - timeA;
+        });
+    }, [chats]);
+
 
     return (
         <Box sx={{ height: "100vh", bgcolor: "#f0f2f5" }}>
@@ -227,7 +242,7 @@ const ChatList = () => {
             {/* ✅ NORMAL CHAT LIST */}
             {!isSearching ? (
                 <Box sx={{ overflowY: "auto", bgcolor: "white" }}>
-                    {chats.map((chat) => {
+                    {sortedChats.map((chat) => {
                         // console.log(chat)
                         const otherUser = chat.participants.find(
                             (p) => p._id !== currentUser._id
@@ -342,9 +357,9 @@ const ChatList = () => {
 
                 </Box>
             ) : (
-                /* ✅ SEARCH LIST */
+                /* ✅ SEARCH LIST - Lazy loaded */
                 <Box sx={{ overflowY: "auto", bgcolor: "white" }}>
-                    {results.map(result => {
+                    {results.slice(0, 50).map(result => {
                         const { type, user, chat } = result;
                         const isGroup = type === "group" || chat?.isGroupChat;
 

@@ -1,6 +1,6 @@
 
 import { Divider, IconButton } from '@mui/material';
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { setChats, selectChat } from "../../Slices/chatSlice"
@@ -46,34 +46,8 @@ const Adduser = ({ onClose }) => {
         };
     }, [onClose]);
 
-    useEffect(() => {
-        const fetchAllUsers = async () => {
-            try {
-                const result = await getAllUsers();
-
-                if (result.status === "success") {
-                    setAllUser(
-                        result.data.filter(user => user._id !== currentUser._id)
-                    );
-                }
-            } catch (error) {
-                console.log(error);
-            }
-        };
-
-        fetchAllUsers();
-    }, []);
-
-    const handleSelectUser = (user) => {
-        if (!selectedUsers.find((u) => u._id === user._id)) {
-            setSelectedUsers([...selectedUsers, user]);
-        }
-
-        setSearch("");
-        setSearchResults([]);
-    };
-
-    const handleSearch = (value) => {
+    // ✅ Memoized search and filter handler
+    const handleSearch = useCallback((value) => {
         setSearch(value);
 
         if (!value.trim()) {
@@ -95,9 +69,52 @@ const Adduser = ({ onClose }) => {
             .sort((a, b) => a.username.localeCompare(b.username));
 
         setSearchResults(filtered);
-    };
+    }, [allUser, selectedUsers, selectedChat?.participants]);
 
-    const handleRemoveUser = async (userId) => {
+    // ✅ Memoized displayed users list
+    const displayedUsers = useMemo(() => {
+        const list = search ? searchResults : allUser;
+        return list.filter(
+            (user) =>
+                !selectedUsers.some((u) => u._id === user._id) &&
+                !selectedChat?.participants?.some(
+                    (member) => member._id === user._id
+                )
+        );
+    }, [search, searchResults, allUser, selectedUsers, selectedChat?.participants]);
+
+    // ✅ Memoized user selection handler
+    const handleSelectUser = useCallback((user) => {
+        setSelectedUsers((prev) => {
+            if (!prev.find((u) => u._id === user._id)) {
+                return [...prev, user];
+            }
+            return prev;
+        });
+        setSearch("");
+        setSearchResults([]);
+    }, []);
+
+    useEffect(() => {
+        const fetchAllUsers = async () => {
+            try {
+                const result = await getAllUsers();
+
+                if (result.status === "success") {
+                    setAllUser(
+                        result.data.filter(user => user._id !== currentUser._id)
+                    );
+                }
+            } catch (error) {
+                console.log(error);
+            }
+        };
+
+        fetchAllUsers();
+    }, []);
+
+    // ✅ Memoized remove handler
+    const handleRemoveUser = useCallback(async (userId) => {
         const token = localStorage.getItem("token");
 
         try {
@@ -133,7 +150,7 @@ const Adduser = ({ onClose }) => {
         } catch (error) {
             console.log(error.message);
         }
-    };
+    }, [selectedChat._id, chats, dispatch]);
 
     const handleAddUser = async () => {
         const token = localStorage.getItem("token");
@@ -277,14 +294,7 @@ const Adduser = ({ onClose }) => {
 
                     }}
                 >
-                    {(search ? searchResults : allUser)
-                        .filter(
-                            (user) =>
-                                !selectedUsers.some((u) => u._id === user._id) &&
-                                !selectedChat?.participants?.some(
-                                    (member) => member._id === user._id
-                                )
-                        )
+                    {displayedUsers
                         .map((user) => {
                             return (
                                 <Box

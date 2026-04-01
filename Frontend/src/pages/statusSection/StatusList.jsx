@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Box, Typography, List, ListItemButton, ListItemAvatar, Avatar, ListItemText, Divider, CircularProgress } from "@mui/material";
 import AddIcon from '@mui/icons-material/Add';
 import { getSocket } from "../../services/chat.service";
@@ -70,8 +70,16 @@ const StatusList = ({ onSelect, selectedStatus }) => {
         }
     };
 
-    const myStatuses = statuses.filter(s => s.user?._id === currentUser?._id);
-    const otherStatuses = statuses.filter(s => s.user?._id !== currentUser?._id);
+    // ✅ Memoize status filtering
+    const myStatuses = useMemo(
+        () => statuses.filter(s => s.user?._id === currentUser?._id),
+        [statuses, currentUser?._id]
+    );
+
+    const otherStatuses = useMemo(
+        () => statuses.filter(s => s.user?._id !== currentUser?._id),
+        [statuses, currentUser?._id]
+    );
 
     return (
         <Box sx={{ display: "flex", flexDirection: "column", height: "100%", bgcolor: "#fff" }}>

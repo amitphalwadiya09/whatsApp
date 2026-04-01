@@ -1,5 +1,5 @@
 import { IconButton } from '@mui/material';
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { setChats, selectChat } from "../../Slices/chatSlice"
@@ -44,7 +44,8 @@ const CreateGroup = ({ onClose }) => {
         };
     }, [onClose]);
 
-    const handleSearch = async (value) => {
+    // ✅ Memoized search handler
+    const handleSearch = useCallback(async (value) => {
         setSearch(value);
 
         if (!value.trim()) {
@@ -79,7 +80,17 @@ const CreateGroup = ({ onClose }) => {
         } catch (error) {
             console.log(error);
         }
-    };
+    }, [selectedUsers]);
+
+    // ✅ Memoized displayed users
+    const displayedUsers = useMemo(() => {
+        const list = search ? searchResults : allUser;
+        return list.filter(
+            (user) =>
+                !selectedUsers.some((u) => u._id === user._id)
+        );
+    }, [search, searchResults, allUser, selectedUsers]);
+
     useEffect(() => {
         const fetchAllUsers = async () => {
             try {
@@ -99,18 +110,20 @@ const CreateGroup = ({ onClose }) => {
         fetchAllUsers();
     }, []);
 
-    const handleSelectUser = (user) => {
-        if (!selectedUsers.find((u) => u._id === user._id)) {
-            setSelectedUsers([...selectedUsers, user]);
-        }
-
+    const handleSelectUser = useCallback((user) => {
+        setSelectedUsers((prev) => {
+            if (!prev.find((u) => u._id === user._id)) {
+                return [...prev, user];
+            }
+            return prev;
+        });
         setSearch("");
         setSearchResults([]);
-    };
+    }, []);
 
-    const handleRemoveUser = (userId) => {
-        setSelectedUsers(selectedUsers.filter((u) => u._id !== userId));
-    };
+    const handleRemoveUser = useCallback((userId) => {
+        setSelectedUsers((prev) => prev.filter((u) => u._id !== userId));
+    }, []);
 
     const handleCreateGroup = async () => {
         if (!groupName?.trim() || selectedUsers.length < 2) {
@@ -300,11 +313,7 @@ const CreateGroup = ({ onClose }) => {
                         // maxHeight: "400px",
                     }}
                 >
-                    {(search ? searchResults : allUser)
-                        .filter(
-                            (user) =>
-                                !selectedUsers.some((u) => u._id === user._id)
-                        )
+                    {displayedUsers
                         .map((user) => {
                             return (
                                 <Box
