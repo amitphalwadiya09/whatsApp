@@ -19,6 +19,8 @@ const StatusWindow = ({ status, onBack, onStatusUpdate }) => {
     const emojiRef = useRef(null);
     const intervalRef = useRef(null);
     // console.log("Rendering StatusWindow with status:", status);
+
+    // Initialize status and mark as viewed
     useEffect(() => {
         setProgress(0);
         setStatusData(status);
@@ -31,17 +33,32 @@ const StatusWindow = ({ status, onBack, onStatusUpdate }) => {
                 headers: { Authorization: `Bearer ${token}` }
             }).catch(e => console.error(e));
         }
+    }, [status?._id, currentUser._id]);
+
+    // Handle timer with pause logic
+    useEffect(() => {
+        if (!status || status.contentType === "video") return;
 
         // Pause timer if viewing list, typing, or mouse is held down
         const shouldPause = showViewersList || isTyping || isMouseDown;
 
-        if (status.contentType !== "video" && !shouldPause) {
+        if (shouldPause) {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
+            return;
+        }
+
+        // Start or resume timer
+        if (!intervalRef.current) {
             const intervalTime = 50;
             intervalRef.current = setInterval(() => {
                 setProgress(prev => {
                     const next = prev + (intervalTime / duration) * 100;
                     if (next >= 100) {
                         clearInterval(intervalRef.current);
+                        intervalRef.current = null;
                         onBack();
                         return 100;
                     }
@@ -51,9 +68,12 @@ const StatusWindow = ({ status, onBack, onStatusUpdate }) => {
         }
 
         return () => {
-            if (intervalRef.current) clearInterval(intervalRef.current);
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
         };
-    }, [status, onBack, currentUser._id, showViewersList, isMouseDown, isTyping]);
+    }, [status?._id, showViewersList, isMouseDown, isTyping, onBack, duration]);
 
     useEffect(() => {
         if (!status) return;
@@ -80,7 +100,7 @@ const StatusWindow = ({ status, onBack, onStatusUpdate }) => {
         };
 
         fetchCurrentStatus();
-    }, [status, onStatusUpdate]);
+    }, [status?._id]);
 
     if (!status) {
         return (
@@ -120,18 +140,9 @@ const StatusWindow = ({ status, onBack, onStatusUpdate }) => {
         setIsMouseDown(false);
     };
 
-    useEffect(() => {
-        function handleClickOutside(event) {
-            if (emojiRef.current && !emojiRef.current.contains(event.target)) {
-                setShowEmoji(false);
-            }
-        }
-
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, []);
+    const handleTouchEnd = () => {
+        setIsMouseDown(false);
+    };
 
     return (
         <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", bgcolor: "black", color: "white", position: "relative", zIndex: 1000 }}>
@@ -147,7 +158,16 @@ const StatusWindow = ({ status, onBack, onStatusUpdate }) => {
 
             {/* Header */}
             <Box sx={{ display: "flex", alignItems: "center", p: 2, pt: 3, position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, background: "linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%)" }}>
-                <IconButton onClick={onBack} sx={{ color: "white" }}><ArrowBackIcon /></IconButton>
+                <IconButton
+                    onClick={onBack}
+                    sx={{
+                        color: "white",
+                        padding: "12px",
+                        "&:hover": { bgcolor: "rgba(255,255,255,0.1)" }
+                    }}
+                >
+                    <ArrowBackIcon fontSize="large" />
+                </IconButton>
                 <Avatar
                     src={status.user?.profilePicture}
                     sx={{
@@ -168,6 +188,8 @@ const StatusWindow = ({ status, onBack, onStatusUpdate }) => {
                 onMouseDown={handleMouseDown}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                onTouchStart={handleMouseDown}
+                onTouchEnd={handleTouchEnd}
             >
                 {status.contentType === "image" || (!status.contentType && status.content.includes("cloudinary")) ? (
                     <img src={status.content} alt="Status" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
@@ -185,8 +207,32 @@ const StatusWindow = ({ status, onBack, onStatusUpdate }) => {
                     <Typography variant="h4" sx={{ textAlign: "center", px: 4 }}>{status.content}</Typography>
                 )}
                 {/* Left/Right Click Zones */}
-                <Box onClick={(e) => handleClickArea(e, "prev")} sx={{ position: "absolute", left: 0, top: "10%", bottom: "10%", width: "30%", cursor: "pointer" }} />
-                <Box onClick={(e) => handleClickArea(e, "next")} sx={{ position: "absolute", right: 0, top: "10%", bottom: "10%", width: "30%", cursor: "pointer" }} />
+                <Box
+                    onClick={(e) => handleClickArea(e, "prev")}
+                    onTouchEnd={(e) => handleClickArea(e, "prev")}
+                    sx={{
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: { xs: "40%", sm: "30%" },
+                        cursor: "pointer",
+                        zIndex: 5
+                    }}
+                />
+                <Box
+                    onClick={(e) => handleClickArea(e, "next")}
+                    onTouchEnd={(e) => handleClickArea(e, "next")}
+                    sx={{
+                        position: "absolute",
+                        right: 0,
+                        top: "10%",
+                        bottom: "10%",
+                        width: "30%",
+                        cursor: "pointer",
+                        zIndex: 5
+                    }}
+                />
 
             </Box>
 

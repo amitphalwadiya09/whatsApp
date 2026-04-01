@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { Box, useTheme, useMediaQuery, Typography } from "@mui/material";
 import StatusList from "./StatusList";
 import StatusWindow from "./StatusWindow";
@@ -8,15 +8,19 @@ const StatusPage = () => {
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
     const [selectedStatus, setSelectedStatus] = useState(null);
 
-    const handleStatusUpdate = (updatedStatus) => {
+    const handleStatusUpdate = useCallback((updatedStatus) => {
         setSelectedStatus(updatedStatus);
-    };
+    }, []);
+
+    const handleBack = useCallback(() => {
+        setSelectedStatus(null);
+    }, []);
 
     if (isMobile) {
         return (
             <Box sx={{ width: "100%", height: "100%" }}>
                 {!selectedStatus && <StatusList onSelect={setSelectedStatus} />}
-                {selectedStatus && <StatusWindow status={selectedStatus} onBack={() => setSelectedStatus(null)} onStatusUpdate={handleStatusUpdate} />}
+                {selectedStatus && <StatusWindow status={selectedStatus} onBack={handleBack} onStatusUpdate={handleStatusUpdate} />}
             </Box>
         );
     }
@@ -43,7 +47,7 @@ const StatusPage = () => {
                 justifyContent: "center"
             }}>
                 {selectedStatus ? (
-                    <StatusWindow status={selectedStatus} onBack={() => setSelectedStatus(null)} />
+                    <StatusWindow status={selectedStatus} onBack={handleBack} onStatusUpdate={handleStatusUpdate} />
                 ) : (
                     <Typography sx={{
                         color: "#54656f",
