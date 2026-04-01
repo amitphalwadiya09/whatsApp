@@ -209,11 +209,12 @@ const ChatList = () => {
                     variant="standard"
                     fullWidth
                     InputProps={{ disableUnderline: true }}
+                    inputProps={{ style: { fontSize: 16 } }}
                     sx={{
                         borderRadius: "20px", bgcolor: "#f6f4f4", px: 1,
                         "& .MuiInputBase-input": {
                             color: "#111b21",
-                            fontSize: "14px",
+                            fontSize: "16px",
                         },
                         "& .MuiInputBase-input::placeholder": {
                             color: "#667781",
